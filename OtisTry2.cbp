@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="OtisTry2" />
+		<Option pch_mode="2" />
+		<Option compiler="cygwin" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/OtisTry2" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gfortran" />
+				<Option parameters="OTIS-MC_E123.ini" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/OtisTry2" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="cygwin" />
+				<Option parameters="OTIS-MC.ini" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Unit filename="otis/bcchange.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/change_area.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/closef.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/conser.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/decomp.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/dictionary.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="otis/dictionary.h" />
+		<Unit filename="otis/distance.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/dynamic.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/error.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/error2.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/error3.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/flowinit.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/fmodules.inc" />
+		<Unit filename="otis/getline.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/header.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/iniparser.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="otis/iniparser.h" />
+		<Unit filename="otis/init.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input1.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input2.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input2_mod.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input3.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input4.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input5.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input6.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/input7.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/inputq.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/lda.inc" />
+		<Unit filename="otis/ldainit.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="otis/maininit.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/maininit_mod.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/mainold.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/mainrun.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/mainrun_mod.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/makefile" />
+		<Unit filename="otis/matrix.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/openfile.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/openfile2.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/openin.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/outinit.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/output.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/outputqc.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/outputss.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/preproc.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/preproc1.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/preproc2.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/preproc3.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/qainit.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/qchange.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/qsteady.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/qunsteady.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/qweights.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/react.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/readq.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/rngs.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="otis/rngs.h" />
+		<Unit filename="otis/rvgs.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="otis/rvgs.h" />
+		<Unit filename="otis/saven.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/setstop.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/settype.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/ssconc.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/ssdiff.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/steady.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/substit.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/update.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/weights.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/wtavg.f">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="otis/yinterp.f">
+			<Option weight="0" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+			<lib_finder disable_auto="1" />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

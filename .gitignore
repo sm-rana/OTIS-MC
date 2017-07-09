@@ -1,0 +1,21 @@
+# Git Ignore Files for OTIS-MC
+
+# Ignore all text files
+*.txt
+*.ini
+*.inp
+*.out
+*.depend
+*.layout
+*.csv
+*.xls
+*.xlsx
+
+*.py
+*.stackdump
+*.save-failed
+
+Others/
+bin/
+obj/
+
