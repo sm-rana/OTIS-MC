@@ -13,7 +13,7 @@
 // MAKE SURE the values match in the file and here!!
 #define MAXREACH    1
 #define MAXPRINT    1
-#define MAXBOUND    10000
+#define MAXBOUND    20000
 #define MAXSEG      5000
 #define MAXSOLUTE   1
 #define MAXFLOWLOC  1
@@ -33,7 +33,17 @@ int mainold_(int* mcmc_iter, double *new_area, double *new_disp, double* new_are
              double *sim_time, double *conc_main, double *conc_ts);
 */
 
+double getNormal(double mu, double sigma);
 double likelihood(double *obs, double *mod, int nobs, double sigma, double *ll);
+
+// count frequency to draw histogram of modeled output
+int updateFreq(int nobs, int *bin_indexes, int *freq);
+int countFrequency(double *obs, double *mod, int nobs, float bin_width, int nbins, int *bin_indexes, int *freq);
+//int printModelConc(FILE* fpModel, double* conc, int ncout, int nchains);
+int printModelConc2(FILE* fpModel, double* conc, int ncout);
+int makeEcho(FILE *fp, char* config_file, int mcmcLen, int burnIn, int rngSeed, int nobservation, char* concChainFile,
+             float pAccept, float elapsedTime, int* debugMode, double pstdD, double pstdA, double pstdAs, double pstdAl,
+             double stdObs, int nobs, double* obsT, double* obsC);
 
 int mainold_(int* IMAX, int* NPRINT, int* IPRINT, int* NSOLUTE, int* PRTOPT, int* NFLOW, int* JBOUND, int* IBOUND,
              int* NBOUND, int* ISORB, int* PINDEX, int* QINDEX,
@@ -61,31 +71,35 @@ int mainold_(int* IMAX, int* NPRINT, int* IPRINT, int* NSOLUTE, int* PRTOPT, int
              //double* BTERMSN[], double* IGROUP[],
 
 //int get_fmodules_inc_(int* MAXREACH, int* MAXPRINT, int* MAXBOUND, int* MAXSEG, int* MAXSOLUTE, int* MAXFLOWLOC);
+int read_obsFile(char* fname, int *nobs, float* time, float* conc);
 
 int main(int argc, char** argv ){
-
-    int i, j, read_flag, count, ind_tmp, ind_cur, count_start, count_final;
+    int i, j, count, ind_tmp, ind_cur, count_start, count_final;
     int mcmc_iter, mcmc_len, burn_in, ncout, nobs, nreach, nseg_tmp, accept, reject, flag_run;
-    int *tind, nline;
+    int nline, nbins;
+    int *tind, *freq, *bin_indexes;
+    int saveModelConc;      // flag: save chains of models for creating confidence bounds
+    int lineLength = 100, nobs_tmp;   // for reading observation file
+
+    //float binWidth;         // used to make histogram. pretty useless, need to remove it.
 
     double rchlen_tmp, time_start, printStep;
-    double new_area, new_disp, new_area2, new_alpha, time_tmp, conc1_tmp, conc2_tmp, param_tmp;
+    double new_area, new_disp, new_area2, new_alpha, time_tmp, conc1_tmp;
     double *sim_time, *obs_time, *conc_main, *obs_conc1, *conc_ts, *conc_interp, *tfrac;
     double *chain_A, *chain_As, *chain_D, *chain_Al, *chain_LL;
-
     double tmp_ll, cur_ll, last_ll, pstd_A, pstd_D, pstd_As, pstd_Al, std_obs, time_mcmc;  // pstd --> proposal standard deviation
+    double *lastConc;
+    double *test;   // This variable is only for debug only.
 
     long seed;
 
-    double *test;   // This variable is only for debug only.
+    char buffer[101];   // for reading observation file.
+    char *fname, *fname2, *fModConc;
     clock_t time_beginning, time_end;
 
-//    int tmp1=5;
-//    double tmpmod[]={10,12,14,15,16};
-//    double tmpobs[]={10.5,12.9,13.5,11.1,14.9};
 
-    char *fname, *fname2;
-    FILE *fp_obs, *fp_out, *fp_debug;
+
+    FILE *fp_obs, *fp_out, *fp_debug, *fpEcho, *fpModels;
     dictionary *dict;
 
     sim_time = (double*)calloc(MAXBOUND,sizeof(double));
@@ -203,9 +217,17 @@ int main(int argc, char** argv ){
     /**********************************************************
                     Get parameters from ini file
     **********************************************************/
+    printf("\n\n\n\t\t------------------------------\n"
+           "\t\t    OTIS-MC  (version 0.1)  \n"
+           "\t\t     (ranasd@mail.uc.edu)   \n"
+           "\t\t         Oct 06, 2017   \n"
+           "\t\t------------------------------\n\n");
+    //printf("=======================================================================\n");
+
     dict = iniparser_load(argv[1]);
     if (dict == NULL) {
-        printf("Error reading ini file\n");
+        printf("  Error reading ini file\n");
+        printf("  Run OTIS-MC.exe with the configuration file.\n");
 		return 2; // ERROR_FILE_READ
 	}
 	//[OTIS]
@@ -223,21 +245,24 @@ int main(int argc, char** argv ){
     pstd_As = iniparser_getdouble(dict, "MCMC:proposal_std_As", -1.5);
     pstd_Al = iniparser_getdouble(dict, "MCMC:proposal_std_Al", -1.5);
     seed = iniparser_getint(dict, "MCMC:rng_seed", -1);
+    nbins = iniparser_getint(dict, "MCMC:nbins", 13);                       // number of bins for generating the histogram of modeled concentration (around the observation concentration)
+    //binWidth = (float)iniparser_getdouble(dict, "MCMC:binWidth", 0.1);      // width of bin (in units of concentration of solute being modeled)
     //[FILES]
     fname = iniparser_getstring(dict, "FILES:observation_file", "");
     fname2 = iniparser_getstring(dict, "FILES:mcmc_output_file", "mcmc_out.csv");
     //[DEBUG]
     debug_flag[0] = iniparser_getint(dict, "DEBUG:print_sample", 0);
+    saveModelConc = iniparser_getint(dict, "DEBUG:saveModelConc", 0);
 
     if (new_area <0 || new_disp<0 || new_area2<0 || new_alpha<0){
-        printf("Error in initial parameter values provided in the ini file.\n");
+        printf("  Error in initial parameter values provided in the ini file.\n");
         return 2; // ERROR_FILE_READ
     }
     //printf("INI DEBUG: %f, %f, %f, %f\n", new_area, new_disp, new_area2,new_alpha);
     //printf("INI DEBUG: %d, %d, %f, %f, %f, %f, %f\n", mcmc_len, burn_in, std_obs, pstd_A, pstd_D, pstd_As, pstd_Al);
     //printf("INI DEBUG: Obs_std = %f \n", std_obs);
     //printf("INI DEBUG: Seed = %d\n",seed);
-
+    debug_flag[1] = saveModelConc;
 /* ----------------------------------------------------------------- */
 /* ----------------------------------------------------------------- */
     chain_A = (double*)calloc(mcmc_len, sizeof(double));    chain_A[0] = new_area;
@@ -265,7 +290,7 @@ int main(int argc, char** argv ){
                  &time_start, sim_time, conc_main, conc_ts, test);
 
     if (ncout > MAXBOUND){
-        printf("Print time step too small, output time points exceeding maximum\n specified limit (MAXBOUND) of %d\n",MAXBOUND);
+        printf("  Print time step too small: No. of output time points = %d\n  Exceeding maximum specified limit (MAXBOUND) of %d\n",ncout, MAXBOUND);
         return 3;
     }
     printStep = (double)IPRINT * TSTEP;
@@ -274,40 +299,80 @@ int main(int argc, char** argv ){
    /**********************************************************
                 Get observation from the observation file
     **********************************************************/
-    printf("Observation File : %s\n",fname);
-    printf("MCMC Output File : %s\n\n",fname2);
+    printf("\tObservation File : %s\n",fname);
+    printf("\tMCMC Output File : %s\n\n",fname2);
     fp_obs = fopen(fname,"r");
     fp_out = fopen(fname2,"w");
 
-    read_flag = 1;
+    if(fp_obs == NULL){
+        printf("Error opening observation file: %s\nUnsuccessful Exit...\n\n",fname);
+        return -1;
+    }
+
+    while(fgets(buffer, lineLength, fp_obs) != NULL){
+        if(buffer[0] == '#'){
+            continue;
+        }
+        else{   // read the number of observations
+            if(sscanf(buffer, "%d", &nobs_tmp) != 1){
+                printf("Error reading NUMBER of OBSERVATIONS from file: %s\nUnsuccessful Exit...\n\n",fname);
+                return -1;
+            }
+            printf("\tNumber of Observations: %d\n", nobs_tmp);
+            break;
+        }
+    }
+
     count = 0;
     count_start = 0;
     count_final = 0;
-
-    while(read_flag > 0){
+    /* ------------------------------------------------------------------- */
+    // Masud (8-28-2017): Improved version of observation file reading:
+    for(i=0; i<nobs_tmp; i++){
         count++;
-        read_flag = fscanf(fp_obs, "%lf %lf", &time_tmp, &conc1_tmp);
-        //printf("read_flag, time, conc = %d, %f, %f\n", read_flag, time_tmp, conc1_tmp);
+        if(fgets(buffer, lineLength, fp_obs) == NULL){
+            printf("Error reading TIME -- CONC pairs from file: %s\nUnsuccessful Exit...\n\n",fname);
+            printf("Number of lines read: %d\n", i);
+            exit(1);
+        }
+        if(sscanf(buffer, "%lf %lf", &time_tmp, &conc1_tmp) != 2){
+            printf("Error reading TIME -- CONC pairs from file: %s\n"
+                   "Number of lines read: %d\n"
+                   "Unsuccessful Exit...\n\n",fname,i);
+            exit(1);
+        }
         if(time_tmp > TFINAL)
             break;
         if (time_tmp < time_start + printStep)
             count_start++;
     }
+    /* ------------------------------------------------------------------- /
+    // Old version of observation file reading:
+    while(read_flag > 0){
+        count++;
+        read_flag = fscanf(fp_obs, "%lf %lf", &time_tmp, &conc1_tmp);
+        if(time_tmp > TFINAL)
+            break;
+        if (time_tmp < time_start + printStep)
+            count_start++;
+    }
+    / ------------------------------------------------------------------- */
     count--;
     count_final = count;
-    nobs = count_final - count_start;
+    nobs = count_final - count_start;       // actual number of observation within the simulation range
+    /* ------------------------------------------------------------------- */
     if((nobs) <= 0){
         printf("nobs, count_final, count_start = %d, %d, %d\n", nobs, count_final, count_start);
         printf("There is no observation in the simulation time range\n");
         printf("Qutting...\n");
         exit(1);    // NO_OBS --> enum ErrCode
     }
-    printf("There are %d observations within the specified simulation time.\n\n", nobs);
+    printf("\tThere are %d observations within the specified simulation time.\n\n", nobs);
     //printf("Obs starting index = %d\n", count_start);
 
     // check if observation time range matches the range of simulation time start and end
     if(nobs > MAXBOUND){
-        printf("Number of observation greater than the specified limit (MAXBOUND = %d). \n\n", MAXBOUND);
+        printf("\tNumber of observation greater than the specified limit (MAXBOUND = mcmc_len%d). \n\n", MAXBOUND);
         exit(1); // LIMIT_EXCEEDED --> enum ErrCode
     }
 
@@ -317,19 +382,52 @@ int main(int argc, char** argv ){
     tind = (int*)calloc(nobs+1, sizeof(int));
     tfrac = (double*)calloc(nobs+1,sizeof(double));         // interpolation fraction
 
+    freq = (int*)calloc(nbins*nobs, sizeof(int));       // will contain histogram frequency of the modeled concentration
+    bin_indexes = (int*)calloc(nobs, sizeof(int));      // will contain the indexes of the previously updated bins
+
+    fModConc = "(Not Saved)";
+    if(saveModelConc){
+        // This block is for saving accepted MCMC modeled concentration chains for plotting purpose
+        fModConc = "modelConc.csv";
+        //fprintf(fpEcho, "\nModel concentration output written to: \"%s\"\n", "modelConc.csv");
+
+        fpModels = fopen(fModConc,"w");
+
+        fprintf(fpModels, "chain number, %d\n", mcmc_len - 1 - burn_in);
+        fprintf(fpModels, "%f", sim_time[0]);
+        for(i=1; i<ncout; i++)
+            fprintf(fpModels, ",%f", sim_time[i]);
+        fprintf(fpModels, "\n");
+    }
+
+    lastConc = (double*) calloc(ncout, sizeof(double));
+    for(i=0; i<ncout; i++)
+        lastConc[i] = conc_main[i];
+
+    /* ----- Read and Store the Observation from file ----------------------------------- */
     rewind(fp_obs);
+    // go through all the comments at the head of the observation file and read the first
+    // line that has the number of observations:
+    while(fgets(buffer, lineLength, fp_obs) != NULL){
+        if(buffer[0] == '#'){
+            continue;
+        }
+        else{   // read the number of observations and then break out of loop
+            break;
+        }
+    }
+
+    // Read Time-Conc pairs:
     ind_tmp = 0;
     for(i=0; i< count_final; i++){
         fscanf(fp_obs, "%lf %lf", &time_tmp, &conc1_tmp);
         if(i >= count_start){
             obs_time[ind_tmp] = time_tmp;
             obs_conc1[ind_tmp] = conc1_tmp;
-            //printf("ind, time, conc = %d, %f, %f\n", ind_tmp, obs_time[ind_tmp], obs_conc1[ind_tmp]);
             ind_tmp++;
         }
     }
-    //printf("%f \t %f\n\n", sim_time[0],sim_time[1]);
-
+    /* ------------------------------------------------------------------- */
     ind_cur = 1;
     for (i = 0; i<nobs; i++){
         for(j=ind_cur; j<ncout; j++){
@@ -344,13 +442,11 @@ int main(int argc, char** argv ){
             }
         }
     }
-
-    // -----------------------------------------------------------------------//
     // -----------------------------------------------------------------------//
     //seed = 2;   // set seed to -1 for seed = clock time
                 // TODO: some better algorithm for random number generator should be used
 
-    PlantSeeds(seed);
+    PlantSeeds(seed);   // a function from rngs.c
     //printf("double number = %f", exp(2.5));
     last_ll = -DBL_MAX;
     cur_ll = 0;
@@ -359,13 +455,12 @@ int main(int argc, char** argv ){
     reject = 0;
     flag_run = 1;
 
-    printf("MCMC Iterations requested = %d\n",mcmc_len-1);
-    printf("Iteration:  ");
-
-    //FILE *fpDebugConc;
-    //fpDebugConc = fopen("Debug_tfrac.csv","w");
+    printf("\tMCMC Iterations requested = %d\n",mcmc_len-1);
+    printf("\tIteration:  ");
     time_beginning = clock();
-
+    /* ------------------------------------------------------------------------------------------------------ */
+    /* ------------------------------------------ MCMC Begins ----------------------------------------------- */
+    /* ------------------------------------------------------------------------------------------------------ */
     for(mcmc_iter = 0; mcmc_iter < mcmc_len -1; mcmc_iter++){
         new_area = chain_A[mcmc_iter];
         new_disp = chain_D[mcmc_iter];
@@ -389,9 +484,6 @@ int main(int argc, char** argv ){
                  &ncout, &flag_run, &new_area, &new_disp, &new_area2, &new_alpha, &nreach, &nseg_tmp, &rchlen_tmp,
                  &time_start, sim_time, conc_main, conc_ts, test);
 
-        // interpolate simulated concentration in conc_interp[N] vector
-        //printf("\ni, tind[i], tfrac[i], C1, C2, conc_interp[i]\n");
-
         for(i=0; i<nobs; i++){
             //c2 = conc_main[tind[i]]
             //c1 = conc_main[tind[i]-1]
@@ -406,26 +498,37 @@ int main(int argc, char** argv ){
         cur_ll = tmp_ll;
 
         //printf("main.c: curLL, lasLL = %f, %f, %f\n",cur_ll,last_ll,exp(cur_ll-last_ll));
+        // ********************************************************************************************** //
+        // Masud (9-25-2017):
+        // For GLUE implementation the if--else block should be turned off
+        // and all samples should be accepted
+        // ********************************************************************************************** //
 
         if(Uniform(0,1) < exp(cur_ll - last_ll)){
             /************ grow chain with newly accepted value *************/
-            if(mcmc_iter > burn_in)
+            if(mcmc_iter >= burn_in){
                 accept++;
+                if(saveModelConc){
+                    for(i=0; i<ncout; i++)
+                        lastConc[i] = conc_main[i];     // save last accepted model concentrations for rejected parameters
+                    printModelConc2(fpModels,lastConc,ncout);
+                }
+
+            }
             last_ll = cur_ll;
-            // store accepted modeled values -- not really
         }
         else{// roll-back to previous sample
-            /************ grow chain with old values *************/
-            if(mcmc_iter == 0){
-                printf("Error in likelihood calculation\nQutting...");
-                goto CLEANUP; // only for debug purpose;
-            }
-            if(mcmc_iter > burn_in)
+            /************ grow chain with old values for rejected parameter samples *************/
+            if(mcmc_iter >= burn_in){
                 reject++;
+                if(saveModelConc){
+                    printModelConc2(fpModels,lastConc,ncout);
+                }
+            }
+
             // For loop should crash if the very first sample is not accepted -- which also should not happen!!
             cur_ll = last_ll;
-            //for i in range(n_cluster):
-            //    patt_chain[chain_start[i] + i_mc] = patt_chain[chain_start[i] + i_mc - 1]
+
             chain_A[mcmc_iter] = chain_A[mcmc_iter-1];
             chain_D[mcmc_iter] = chain_D[mcmc_iter-1];
             chain_As[mcmc_iter] = chain_As[mcmc_iter-1];
@@ -436,30 +539,47 @@ int main(int argc, char** argv ){
         chain_LL[mcmc_iter] = cur_ll;
 
         /************ grow parameter chain with normal() *************/
-        do{
-            param_tmp = chain_A[mcmc_iter] + Normal(0,pstd_A);
-        }while(param_tmp < 0);
-        new_area = param_tmp;
-        //new_area = (param_tmp > 0 ? param_tmp : chain_A[mcmc_iter]);
+        // Masud (9-25-2017):
+        // For GLUE implementation the next four DO loop should be replaced with
+        // Uniform distribution instead of Normal
 
-        do{
-            param_tmp = chain_D[mcmc_iter] + Normal(0,pstd_D);
-        }while(param_tmp < 0);
-        new_disp = param_tmp;
-        //new_disp = (param_tmp > 0 ? param_tmp : chain_D[mcmc_iter]);
-        do{
-            param_tmp = chain_As[mcmc_iter] + Normal(0,pstd_As);
-        }while(param_tmp < 0);
-        new_area2 = param_tmp;
-        //new_area2 = (param_tmp > 0 ? param_tmp : chain_As[mcmc_iter]);
+        /*
+        // Original code:
+        new_area = chain_A[mcmc_iter]   + Normal(0,pstd_A);
+        new_disp = chain_D[mcmc_iter]   + Normal(0,pstd_D);
+        new_area2 = chain_As[mcmc_iter] + Normal(0,pstd_As);
+        new_alpha = chain_Al[mcmc_iter] + Normal(0,pstd_Al);
+        */
+        // if proposal std is zero (or less) then that parameter is held constant
+        new_area = chain_A[mcmc_iter]   + getNormal(0.0, pstd_A);
+        new_disp = chain_D[mcmc_iter]   + getNormal(0.0, pstd_D);
+        new_area2 = chain_As[mcmc_iter] + getNormal(0.0, pstd_As);
+        new_alpha = chain_Al[mcmc_iter] + getNormal(0.0, pstd_Al);
 
-        do{
-            param_tmp = chain_Al[mcmc_iter] + Normal(0,pstd_Al);
-        }while(param_tmp < 0);
-        new_alpha = param_tmp;
-        //new_alpha = (param_tmp > 0 ? param_tmp : chain_Al[mcmc_iter]);
+        while (new_area<0.0 || new_disp<0.0 || new_area2<0.0 || new_alpha<0.0){
+            mcmc_iter++;    // move the chain iterator forward
+            if(mcmc_iter >= burn_in){
+                reject++;   // reject the negative sample
+                if(saveModelConc){
+                    printModelConc2(fpModels,lastConc,ncout);  // print concentrations for the last accepted parameters
+                }
+            }
+            // roll back parameter samples and likelihood chain
+            cur_ll = last_ll;
+            chain_A[mcmc_iter] = chain_A[mcmc_iter-1];
+            chain_D[mcmc_iter] = chain_D[mcmc_iter-1];
+            chain_As[mcmc_iter] = chain_As[mcmc_iter-1];
+            chain_Al[mcmc_iter] = chain_Al[mcmc_iter-1];
+            chain_LL[mcmc_iter] = cur_ll;
 
-        //Grow Chains:
+             /************ Try sampling again *************/
+            new_area = chain_A[mcmc_iter]   + getNormal(0.0, pstd_A);
+            new_disp = chain_D[mcmc_iter]   + getNormal(0.0, pstd_D);
+            new_area2 = chain_As[mcmc_iter] + getNormal(0.0, pstd_As);
+            new_alpha = chain_Al[mcmc_iter] + getNormal(0.0, pstd_Al);
+        }
+
+        //Propose new parameter values:
         chain_A[mcmc_iter + 1] = new_area;
         chain_D[mcmc_iter + 1] = new_disp;
         chain_As[mcmc_iter + 1] = new_area2;
@@ -472,13 +592,21 @@ int main(int argc, char** argv ){
 
     time_end = clock();
     time_mcmc = (double)(time_end - time_beginning) / CLOCKS_PER_SEC;
-    printf("Total time required for MCMC = %.2f hrs\n",time_mcmc/3600);
 
-    printf("Acceptance rate: %.2f\n\n",((float)accept/(float)mcmc_len*100));
+    printf("\tTotal time required for MCMC = %.2f hrs\n",time_mcmc/3600);
+    printf("\tAcceptance rate: %.2f\n\n",((float)accept/(float)mcmc_len*100));
 
+
+    // print parameter chains to file
     fprintf(fp_out, "Likelihood, Area, Disp, Area2, Alpha\n");
     for(i=0; i<mcmc_len -1; i++)
         fprintf(fp_out,"%f,%f,%f,%f,%f\n",chain_LL[i],chain_A[i],chain_D[i],chain_As[i],chain_Al[i]);
+
+
+    fpEcho = fopen("echo-mc.out", "w");
+
+    makeEcho(fpEcho, argv[1], mcmc_len-1, (int)burn_in, (int)seed, nobs,fModConc,((float)accept/(float)mcmc_len*100),
+             time_mcmc/3600.0, debug_flag, pstd_D, pstd_A, pstd_As, pstd_Al, std_obs, nobs, obs_time, obs_conc1);
 
     // ---------------DEBUG BLOCK-------------------------------------------------
     if(debug_flag[0]){
@@ -495,25 +623,66 @@ int main(int argc, char** argv ){
     }
     // ---------------end of DEBUG BLOCK -------------------------------------------------
 
-    CLEANUP:
-    fclose(fp_obs); fclose(fp_out);
+    printf("\tFreeing allocated memory ...");
+
+    //CLEANUP:
+    fclose(fp_obs); fclose(fp_out); fclose(fpEcho);
+
     free(test); free(sim_time); free(conc_main);  free(conc_ts);
     free(obs_time); free(obs_conc1); free(conc_interp); free(tind); free(tfrac);
 
-    printf("Freeing up dynamic variables...");
+    if(saveModelConc){
+        fclose(fpModels);
+    }
+    free(lastConc);
+
 
     free(PRTLOC); free(DISP);   free(FLOWLOC);  free(QLATOUT);  free(DIST);
     free(LAMBDA2);  free(LAMHAT);  free(LAMHAT2);  free(RHOLAM);  free(CSBACK);
 
     free(chain_A); free(chain_D); free(chain_As); free(chain_Al); free(chain_LL);
+    free(freq); free(bin_indexes);
 
     free(USCONC); free(CLATIN); free(CONC); free(CONC2); free(CLVAL); free(LAMBDA);
     free(LAM2DT); free(AWORK); free(BWORK); free(USBC); free(SGROUP2); free(SGROUP);
     free(LHATDT); free(SORB); free(LHAT2DT); free(KD); free(CLATINN); free(TWOPLUS);
     free(BN); free(TGROUP); free(BTERMS); free(BTERMSN); free(IGROUP);
 
-    printf(" Success!\n\nExit.\n");
+    printf(" Success!\n");
+    printf("  ==================================================================================\n");
     exit(0);
+
+    return 0;
+}
+
+double getNormal(double mu, double sigma){
+    if (sigma<=0.0)
+        return 0.0;
+    return Normal(mu, sigma);
+}
+
+/*
+int printModelConc(FILE* fpModel, double* conc, int ncout, int nchains)
+{
+    int i, chain, istart;
+    for(chain = 0; chain < nchains; chain++){
+        istart = chain * ncout;
+        for(i=0; i<ncout; i++)
+            fprintf(fpModel, "%f, ",conc[istart + i]);
+        fprintf(fpModel, "\n");
+    }
+    return 0;
+}
+*/
+
+int printModelConc2(FILE* fpModel, double* conc, int ncout)
+{
+    int i;
+
+    fprintf(fpModel, "%f",conc[0]);     // First concentration is printed separately to prevent the last comma
+    for(i=1; i<ncout; i++)
+            fprintf(fpModel, ",%f",conc[i]);
+    fprintf(fpModel, "\n");
 
     return 0;
 }
@@ -536,3 +705,194 @@ double likelihood(double *obs, double *mod, int nobs, double sigma, double *ll)
     //printf("DEBUG: Likelihood = %f\n", *ll);
     return 0;
 }
+
+int updateFreq(int nobs, int *bin_indexes, int *freq)
+{
+    // this function will be used to update bin frequency when a particular parameter set is rejected
+    //      and a rollback to the previous parameter set is performed.
+    int i;
+
+    for (i=0; i<nobs; i++)
+    {
+        //printf("updateFreq(): bin_indexes[%d] = %d", i, bin_indexes[i]);
+        freq[bin_indexes[i]]++;
+    }
+
+
+    return 0;
+}
+
+int countFrequency(double *obs, double *mod, int nobs, float bin_width, int nbins, int *bin_indexes, int *freq){
+/*
+    Counts the frequency of model values in bins around the observed value for each accepted parameter sets
+    from the MCMC simulations so that model prediction bounds can be drawn.
+*/
+    int iobs;
+    int binInd, bin_upper, bin_lower;         // index of the bin, the center being zero
+    int binCenter_t, bin_center;
+    double obs_t;       // value for the bin containing the obs
+    const float TOLERANCE = 0.00001;
+
+    bin_center = (nbins - 1)/2;        // index of the mid point of freq[] which contains the observation
+    for(iobs = 0; iobs < nobs; iobs++)
+    {
+        bin_lower = nbins * iobs;
+        binCenter_t = bin_center + bin_lower;
+        bin_upper = nbins * (iobs + 1) - 1;
+
+        //printf("bin_lower, binCenter_t, bin_upper = %d, %d, %d\n", bin_lower, binCenter_t, bin_upper);
+
+        if(mod[iobs] > obs[iobs])
+        {
+            obs_t = obs[iobs] - bin_width/2.0;
+            binInd = (int)ceil((mod[iobs] - obs_t)/bin_width) - 1;
+            //printf("Mod = %f, binInd = %d\n", mod[i], binInd);
+            binInd += binCenter_t;                              // actual index in freq[]
+            if (binInd > bin_upper)                         // if modeled value is too high than observed
+            {
+                freq[bin_upper] += 1;
+                bin_indexes[iobs] = bin_upper;
+            }
+            else
+            {
+                freq[binInd] += 1;
+                bin_indexes[iobs] = binInd;
+            }
+
+        }
+        else
+        {
+            obs_t = obs[iobs] + bin_width/2.0;
+            binInd = -1 * (int)floor((obs_t - mod[iobs])/bin_width + TOLERANCE) ;  // bindInd will be negative
+            //printf("Mod = %f, binInd = %d\n", mod[i], binInd);
+            binInd += binCenter_t;                              // actual index in freq[]
+            if (binInd < bin_lower)                                 // if modeled value is too low than observed
+            {
+                freq[bin_lower] += 1;
+                bin_indexes[iobs] = bin_lower;
+            }
+            else
+            {
+                freq[binInd] += 1;
+                bin_indexes[iobs] = binInd;
+            }
+        }
+    }
+    return 0;
+}
+
+
+int makeEcho(FILE *fp, char* config_file, int mcmcLen, int burnIn, int rngSeed, int nobservation, char* concChainFile,
+             float pAccept, float elapsedTime, int* debugMode, double pstdD, double pstdA, double pstdAs, double pstdAl,
+             double stdObs, int nobs, double* obsT, double* obsC)
+{
+    // -- Local Variables -------------------------------------- //
+    int i;
+    int debug = 0;
+
+    time_t timer;
+    char buffer[26];
+    struct tm* currentTime;
+    // --------------------------------------------------------- //
+
+    time(&timer);
+    currentTime = localtime(&timer);
+    strftime(buffer, 26, "%m-%d-%Y (%H:%M:%S)", currentTime);
+
+    for (i=0; i<10; i++){
+        if(debugMode[i]){
+            debug = 1;
+            break;
+        }
+    }
+
+    fprintf(fp, "\n\n");
+    fprintf(fp, "\t\t\t\t\t  MARKOV CHAIN MONTE CARLO PARAMETER ESTIMATION WITH\n");
+    fprintf(fp, "\t\t\t\t\t  OTIS SOLUTE TRANSPORT MODEL (Runkel 1998)\n\n");
+    fprintf(fp, "\t\t\t\t\t  VERSION: 0.1 (2017)\n\n");
+    fprintf(fp, "\t\t\t\t\t  S.M. Masud Rana (sm.masudrana@gmail.com)\n");
+    fprintf(fp, "\t\t\t\t\t  Aug 21, 2017\n");
+    fprintf(fp, "\t\t\t\t\t  --------------------------------------------------\n\n");
+
+    fprintf(fp, "\n\t\t  DATE: %s\n", buffer);
+
+    fprintf(fp,"\n\n");
+    fprintf(fp, "\t\t  INPUT\n\t\t  --------------------------------------------------------------\n");
+    fprintf(fp, "\t\t  MCMC CONFIGURATION FILE                  :   %s\n", config_file);
+    fprintf(fp, "\t\t  MCMC ITERATIONS                          :   %d\n", mcmcLen);
+    fprintf(fp, "\t\t  BURN-IN                                  :   %d\n", burnIn);
+    fprintf(fp, "\t\t  RANDOM NO GENERATOR SEED (-1 CLOCK TIME) :   %d\n", rngSeed);
+    fprintf(fp, "\t\t  NO. D/S OBSERVATION                      :   %d\n", nobservation);
+    fprintf(fp, "\t\t  MEASUREMENT STD (NORMAL DIST)            :   %.3f\n", stdObs);
+    fprintf(fp, "\t\t  PROPOSAL STD (NORMAL DIST)\n");
+    fprintf(fp, "\t\t  (Dispersion, Area, TS Area, Alpha)       :   %.2E, %.2E, %.2E, %.2E\n", pstdD, pstdA, pstdAs, pstdAl);
+    if(debug)
+        fprintf(fp, "\n\t\t  DEBUG MODE                               :   %s\n", "ON");
+
+    fprintf(fp, "\n\n");
+    fprintf(fp, "\t\t  OUTPUT\n\t\t  --------------------------------------------------------------\n");
+    fprintf(fp, "\t\t  ACCEPTANCE RATE (%%)                      :   %.2f\n", pAccept);
+    fprintf(fp, "\t\t  TOTAL TIME ELAPSED (Hours)               :   %.3f\n", elapsedTime);
+
+    if(debugMode[0])
+        fprintf(fp, "\t\t  CONCENTRATIONS FOR LAST ACCEPTED PARAMS  :   %s\n", "Debug_ConcOut.csv");
+    if(debugMode[1])
+        fprintf(fp, "\t\t  CONCENTRATION CHAINS WRITTEN TO          :   %s\n", concChainFile);
+
+    fprintf(fp, "\n\n");
+    fprintf(fp, "\t\t  OBSERVATIONS USED\n\t\t  --------------------------------------------------------------\n");
+    fprintf(fp, "\t\t  TIME            CONC\n\t\t  --------        --------\n");
+
+    for(i=0; i<nobs; i++)
+        fprintf(fp, "\t\t   %7.4f         %5.2f\n", obsT[i], obsC[i]);
+
+    return 0;
+}
+
+int read_obsFile(char* fname, int *nobs, float* time, float* conc){
+    FILE * fp;
+    //char* fname = "obsE12.inp";
+    char buffer[201];
+    int lineLength = 200, i;
+    //float time[500], conc[500];
+
+    fp = fopen(fname,"r");
+
+    if(fp == NULL){
+        printf("Error opening observation file: %s\nUnsuccessful Exit...\n\n",fname);
+        return -1;
+    }
+
+    while(fgets(buffer,lineLength,fp) != NULL){
+        if(buffer[0] == '#'){
+            continue;
+        }
+        else{   // read the number of observations
+            if(sscanf(buffer, "%d", nobs) != 1){
+                printf("Error reading NUMBER of OBSERVATIONS from file: %s\nUnsuccessful Exit...\n\n",fname);
+                return -1;
+            }
+            break;
+        }
+    }
+
+    //printf("\n\nNumber of observations to read: %d\n", *nobs);
+
+    for(i=0; i<(*nobs); i++){
+        if(fgets(buffer,lineLength,fp) == NULL){
+            printf("Error reading TIME -- CONC pairs from file: %s\nUnsuccessful Exit...\n\n",fname);
+            return -1;
+        }
+        if(sscanf(buffer, "%f %f", &time[i], &conc[i]) != 2){
+            printf("Error reading TIME -- CONC pairs from file: %s\n"
+                   "Number of lines read: %d\n"
+                   "Unsuccessful Exit...\n\n",fname,i);
+            return -1;
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+

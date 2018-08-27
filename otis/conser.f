@@ -86,11 +86,11 @@
 *        Determine the main channel concentration by solving the system
 *        of equations via the Thomas Algorithm (substitution step).
 *
-        write(*,*) "SM: conser.f D[] --->"
+        !write(*,*) "SM: conser.f D[] --->"
         !write(*,*) C(1),C(2),C(3),C(4)
         !write(*,*) C(17),C(18),C(19),C(20)
-        write(*,*) D(1),D(2),D(3),D(4)
-        write(*,*) D(17),D(18),D(19),D(20)
+        !write(*,*) D(1),D(2),D(3),D(4)
+        !write(*,*) D(17),D(18),D(19),D(20)
         !write(*,*) AN(1),AN(2),AN(3),AN(4),AN(5),AN(6),AN(7)
         !write(*,*)BN(1,1),BN(2,1),BN(3,1),BN(4,1),BN(5,1),BN(6,1),BN(7,1)
         !write(*,*)BWORK(1,1),BWORK(2,1),BWORK(3,1),BWORK(4,1),BWORK(5,1)
@@ -99,12 +99,12 @@
          CALL SUBSTIT(IMAX,CONC,AWORK,BWORK,C,D,J)
         !write(*,*) "SM: conser.f D[] --->"
         !write(*,*) C(1),C(2),C(3),C(4),C(5)
-        write(*,*) D(1),D(2),D(3),D(4)
-        write(*,*) D(17),D(18),D(19),D(20)
+        !write(*,*) D(1),D(2),D(3),D(4)
+        !write(*,*) D(17),D(18),D(19),D(20)
         !write(*,*) AN(1),AN(2),AN(3),AN(4),AN(5),AN(6),AN(7)
         !write(*,*)BN(1,1),BN(2,1),BN(3,1),BN(4,1),BN(5,1),BN(6,1),BN(7,1)
         !write(*,*)BWORK(1,1),BWORK(2,1),BWORK(3,1),BWORK(4,1),BWORK(5,1)
-        write(*,*) "END of conser.f --->"
+        !write(*,*) "END of conser.f --->"
 *
 *        Compute the storage zone concentration
 *

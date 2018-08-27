@@ -407,7 +407,7 @@
        !SUCCESS: write(*,*) "DEBUG: nseg(1),rchlen(1) = ",nseg(1),rchlen(1)
 *
 *     perform the dynamic simulation
-*
+*       ! IPRINT = NINT(PSTEP/TSTEP)
       ncout = INT((INT((TFINAL - TSTART)/TSTEP) + 1) / IPRINT) + 1
 
       time_start = TSTART   !SM: getting start time for the ELSE block
